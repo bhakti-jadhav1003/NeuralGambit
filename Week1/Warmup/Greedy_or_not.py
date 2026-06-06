@@ -1,7 +1,11 @@
-arr=[-5,5,9,-4,10,-9,0,3,-10]
-l=arr[0]
-r=arr[8]
-n=len(arr)
+n=int(input())
+arr=[]
+for i in range(n):
+  arr.append(int(input()))
+if n==0:
+  print("tie")
+
+
 
 def score(l,r):
   if l==r:
@@ -17,3 +21,4 @@ elif(diff<0):
   print("Player 2 wins by",-diff)
 else:
   print("tie")
+
