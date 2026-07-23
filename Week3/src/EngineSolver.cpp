@@ -1,4 +1,6 @@
 #include "../include/EngineSolver.h"
+#include "../include/zobrist.h"
+#include "NNUE.h"
 #include <iostream>
 using namespace std;
 
@@ -8,14 +10,23 @@ EngineSolver::EngineSolver(string fen,int depth) {//because we have 3 files with
     maxDepth=depth;
     nodesEvaluated=0;
     board=chess::Board(fen);//look for the board class in the chess namespace
+    Zobrist::init();
+    hashKey=generateHash();//constructor should generate initial hash value
 //create a new board object from the chess library using the fen string
+
+    if(!nnue.loadWeights("nnue_weights.bin")){
+        cout<<"NNUE loading failed\n";
+    }else{
+    cout<<"NNUE loaded successfully\n";
+    }
 }
 //when we initialise a var in the header file it means this is the initialisation every time a new object is created
 //when we initialise in a function means every time the function is called the var is initialised
 //we need both initialisation as for the first time the function is called it is ok but it needs to be reset for every time function is called
 // ===== MAIN SOLVER =====
 chess::Move EngineSolver::solvePuzzle() {
-     nodesEvaluated=0;//this must be set to 0 as it will measure only the evaluted nodes for that puzzle not the total nodes till now if the function is runa no of times
+    
+    nodesEvaluated=0;//this must be set to 0 as it will measure only the evaluted nodes for that puzzle not the total nodes till now if the function is runa no of times
     // TODO: Implement puzzle solving logic
     chess::Movelist moves;
     chess::movegen::legalmoves(moves, board);
@@ -27,14 +38,17 @@ chess::Move EngineSolver::solvePuzzle() {
 //chess::move is a object of class move which stores all the details of the move 
 //it only declares a var doent initialise (it means to create a empty box with no value)
 bool isWhiteToMove=(board.sideToMove()==chess::Color::WHITE);//this needs to be saved before the move is taken
+
     for(auto move : moves){
+        
         
             //in the board class use the function make move which makes the given move 
 //we cannot check whose turn it is after making a move as then it would be the next players move so we need to store whose move it is before making a move   
 //minimax already increments the nodes evaluated no need to do it here
-            board.makeMove(move);
-            eval=minimax(maxDepth-1,INT_MIN,INT_MAX,(board.sideToMove() == chess::Color::WHITE));//since already made a move we need to search maxDepth-1 deeper
-            board.unmakeMove(move);//we need to unmake the move before comparision after the evaluation is done
+        
+        board.makeMove(move);
+        eval=minimax(maxDepth-1,INT_MIN,INT_MAX,(board.sideToMove() == chess::Color::WHITE));//since already made a move we need to search maxDepth-1 deeper
+        board.unmakeMove(move);//we need to unmake the move before comparision after the evaluation is done
         if(isWhiteToMove){ 
             if(eval>besteval){
                 besteval=eval;
@@ -66,9 +80,21 @@ bool isWhiteToMove=(board.sideToMove()==chess::Color::WHITE);//this needs to be 
 
 // ===== MINIMAX WITH ALPHA-BETA =====
 int EngineSolver::minimax(int depth, int alpha, int beta, bool isMaximizing) {
+    
     // TODO: Implement minimax + alpha-beta pruning
     nodesEvaluated++;//every time minimax algorithm with alpha beta pruning is executed that node becomes evaluated
-    
+    chess::Movelist moves;
+    chess::movegen::legalmoves(moves, board);
+
+    if(moves.empty()){//its a checkmate or stalemate(kind of draw when the player has no check mate but also no possible move to make else it may end up in a check if it does so)
+        if(board.inCheck())// need to check for checkmate first before is quiet
+            return isMaximizing ? -10000000 : 10000000;//WHEN A CHECKMATE 
+        else // as it may be checkmate but quiet so 
+            return 0;//draw no one wins
+    }
+
+
+
     if(depth==0){
         if(isQuiet()){
             return evaluate();
@@ -79,23 +105,7 @@ int EngineSolver::minimax(int depth, int alpha, int beta, bool isMaximizing) {
         }
         
     }
-    chess::Movelist moves;/////
-    chess::movegen::legalmoves(moves, board);/////
     
-
-
-
-
-
-
-    if(moves.empty()){//its a checkmate or stalemate(kind of draw when the player has no check mate but also no possible move to make else it may end up in a check if it does so)
-        if(board.inCheck()){
-            return (isMaximizing)?(-10000000):(10000000);//WHEN A CHECKMATE 
-        }//IS DEPTH==0 ALREADY CHECKING IF LEGALMOVES ARE THERE SINCE THERE ARENT THEY ARE ALREADY DETECTED BY EARLIER
-        else{
-            return 0;//draw no one wins
-        }
-    }
     if(isMaximizing){
         int maxeval=INT_MIN;
         
@@ -141,6 +151,7 @@ int EngineSolver::minimax(int depth, int alpha, int beta, bool isMaximizing) {
 
 // ===== QUIESCENCE SEARCH =====
 int EngineSolver::quiescence(int alpha, int beta,int depth_limit,bool is_maximizing) {
+    
 
     if(depth_limit==0){
         return evaluate();
@@ -168,6 +179,15 @@ int EngineSolver::quiescence(int alpha, int beta,int depth_limit,bool is_maximiz
     chess::Movelist moves;
     chess::movegen::legalmoves(moves, board);//get all the legal moves for the current position
     //we need to check those legal moves which lead to captures
+
+//check if the board is in check mate and if there are no valid moves available
+    if (moves.empty()) {
+        if (board.inCheck())
+            return is_maximizing ? -10000000 : 10000000;
+        return 0;
+    }
+
+
     for(auto move:moves){//the legal moves are the moves possible at that node at that depth
         if(board.isCapture(move)){//if it is a capture move
         board.makeMove(move);//make the move
@@ -222,65 +242,90 @@ bool EngineSolver::isQuiet() {
 // ===== HELPER: Evaluate position =====
 int EngineSolver::evaluate() {
     // TODO: Count material and return score
-    int whiteScore=0;
-    int blackScore=0;
+//     int whiteScore=0;
+//     int blackScore=0;
     
-    for(int i=0;i<64;i++){
-        chess::Piece piece = board.at(i);
-        if(piece.type()==chess::PieceType::BISHOP){
-            if(piece.color()==chess::Color::WHITE){
-                whiteScore+=3;
-            }
-            else{
-                blackScore+=3;
-            }
-        }
-        else if(piece.type()==chess::PieceType::KING){
-            continue;
-        }
-        else if(piece.type()==chess::PieceType::QUEEN){
-            if(piece.color()==chess::Color::WHITE){
-                whiteScore+=9;
-            }
-            else{
-                blackScore+=9;
-            }
-        }
-        else if(piece.type()==chess::PieceType::PAWN){
-            if(piece.color()==chess::Color::WHITE){
-                whiteScore+=1;
-            }
-            else{
-                blackScore+=1;
-            }
-        }
-        else if(piece.type()==chess::PieceType::ROOK){
-            if(piece.color()==chess::Color::WHITE){
-                whiteScore+=5;
-            }
-            else{
-                blackScore+=5;
-            }
-        }
-        else if(piece.type()==chess::PieceType::KNIGHT){
-            if(piece.color()==chess::Color::WHITE){
-                whiteScore+=3;
-            }
-            else{
-                blackScore+=3;
-            }
-        }
-        else{
-            continue;
-        }
-    }
-        int finalScore=whiteScore-blackScore;
-        return finalScore;
+//     for(int i=0;i<64;i++){
+//         chess::Piece piece = board.at(i);
+//         if(piece.type()==chess::PieceType::BISHOP){
+//             if(piece.color()==chess::Color::WHITE){
+//                 whiteScore+=3;
+//             }
+//             else{
+//                 blackScore+=3;
+//             }
+//         }
+//         else if(piece.type()==chess::PieceType::KING){
+//             continue;
+//         }
+//         else if(piece.type()==chess::PieceType::QUEEN){
+//             if(piece.color()==chess::Color::WHITE){
+//                 whiteScore+=9;
+//             }
+//             else{
+//                 blackScore+=9;
+//             }
+//         }
+//         else if(piece.type()==chess::PieceType::PAWN){
+//             if(piece.color()==chess::Color::WHITE){
+//                 whiteScore+=1;
+//             }
+//             else{
+//                 blackScore+=1;
+//             }
+//         }
+//         else if(piece.type()==chess::PieceType::ROOK){
+//             if(piece.color()==chess::Color::WHITE){
+//                 whiteScore+=5;
+//             }
+//             else{
+//                 blackScore+=5;
+//             }
+//         }
+//         else if(piece.type()==chess::PieceType::KNIGHT){
+//             if(piece.color()==chess::Color::WHITE){
+//                 whiteScore+=3;
+//             }
+//             else{
+//                 blackScore+=3;
+//             }
+//         }
+//         else{
+//             continue;
+//         }
+//     }
+//         int finalScore=whiteScore-blackScore;
+//         return finalScore;
+    
+
+    return nnue.evaluate(board);
 }
+ 
 
 void EngineSolver::makeMove(chess::Move move){
     board.makeMove(move);
 
+}
+uint64_t EngineSolver::generateHash()
+{
+    uint64_t hash = 0;
+
+    for (int sq = 0; sq < 64; sq++)
+    {
+        chess::Piece piece = board.at(chess::Square(sq));
+
+        if (piece != chess::Piece::NONE)
+        {
+            hash ^= Zobrist::pieceKeys[int(piece)][sq];
+        }
+    }
+
+    if (board.sideToMove() == chess::Color::WHITE)
+    {
+        hash ^= Zobrist::sideKey;
+    }
+
+    return hash;
 }
 
 

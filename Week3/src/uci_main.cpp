@@ -3,8 +3,10 @@
 #include <chrono>
 #include "../include/EngineSolver.h"
 #include "../lib/chess/include/chess.hpp"
+#include "../include/zobrist.h"
 using namespace std;
 int main(){
+    Zobrist::init();//when the program starts every object run the same zobrist function so they have the same hash value
     string command;
     chess::Board board;//this board object stores the current board position
     while(getline(cin,command)){//this loop continues to take input after every command till the program exits

@@ -5,9 +5,11 @@
 #include<string>
 #include "../include/EngineSolver.h"
 #include "../include/PuzzleLoader.h"
+#include "../include/zobrist.h"
 using namespace std;
 
 int main(){
+    Zobrist::init();//to calculate the inital value of hash
     int correct=0;
     int total=0;
     int puzzleNumber=1;
@@ -25,7 +27,7 @@ for(const auto& file : files){
     for(auto puzzle : Puzzles){
     //loadfromjson is a static function
     //create your specific engine for each puzzle
-    EngineSolver solver(puzzle.fen,10);//enginesolver is the class and solver is the object of that class
+    EngineSolver solver(puzzle.fen,2);//enginesolver is the class and solver is the object of that class
     
     chess::Board b(puzzle.fen);
 
